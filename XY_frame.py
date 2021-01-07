@@ -106,5 +106,5 @@ def track(img,darknet_image,network,class_names,track_dict,st_dict,count,cyl,mov
 	except Exception as e:
 		print(str(e))
 		traceback.print_exc()
-		error.raised("2",str(e))
+		error.raised(256,"Error in Cylinder motion")
 

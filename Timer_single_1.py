@@ -54,13 +54,12 @@ import error
 import shutil
 import time
 import os
-er =0
 config1="/home/smartcow/BPCL/BPCL_final/UI_parameters.json"
 config="/home/smartcow/BPCL/BPCL_final/BPCL_config.json"
 with open(config) as json_data:
 	info=json.load(json_data)
 	Palert_frame,Dalert_frame,Malert_frame= info["Palert_frame"],info["Dalert_frame"],info['Malert_frame']
-	event_file,gpu_path,temp_folder = info["event_file"],info["gpu_path"],info["temp_folder"]
+	net_file,event_file,gpu_path,temp_folder = info["net_file"]info["event_file"],info["gpu_path"],info["temp_folder"]
 
 with open(config1) as json_data:
 	info =json.load(json_data)
@@ -140,37 +139,27 @@ def video_function(event,cam):
 					le_time = datetime.now()
 
 def event_call(event,temp,path):
-	global er
+	logdate=(datetime.now()).strftime("%Y-%m-%d %H:%M:%S")
+	#print("video Path {}".format(vid_path))
+	if path  == None:
+		if event == "Reset":
+			data={'event_time':logdate,'event_description':"Reset function"}
+		elif event == "EVENT21_OFF":
+			data={'event_time':logdate,'event_description':"Person not in ROI Rectified"}
+		elif event == "EVENT22_OFF" or event == "EVENT23_OFF":
+			data={'event_time':logdate,'event_description':"Person not attentive Rectified"}
+	else:
+		shutil.move(temp,path)
+		print("file moved from {} to {}".format(temp,path))
+		if event == "EVENT21_ON":
+			data={'event_time':logdate,'path':path,'event_description':"Person not in ROI"}
+		elif event == "EVENT22_ON" or event == "EVENT23_ON":
+			data={'event_time':logdate,'path':path,'event_description':"Person not attentive"}
+	print(data)
+	if event == "Reset":
+		event = "EVENT21_OFF"
 	try:
 		sc=ClientSocket(device_id=str('BPCL_SUR_NX_0001'))
-	except Exception as e:
-		print("Client socket error")
-		er=er+1
-		if er < 4:
-			time.sleep(1)
-			event_call(event,path)
-		error.raised("3",str(e))
-
-	try:
-		logdate=(datetime.now()).strftime("%Y-%m-%d %H:%M:%S")
-		#print("video Path {}".format(vid_path))
-		if path  == None:
-			if event == "Reset":
-				data={'event_time':logdate,'event_description':"Reset function"}
-			elif event == "EVENT21_OFF":
-				data={'event_time':logdate,'event_description':"Person not in ROI Rectified"}
-			elif event == "EVENT22_OFF" or event == "EVENT23_OFF":
-				data={'event_time':logdate,'event_description':"Person not attentive Rectified"}
-		else:
-			shutil.move(temp,path)
-			print("file moved from {} to {}".format(temp,path))
-			if event == "EVENT21_ON":
-				data={'event_time':logdate,'path':path,'event_description':"Person not in ROI"}
-			elif event == "EVENT22_ON" or event == "EVENT23_ON":
-				data={'event_time':logdate,'path':path,'event_description':"Person not attentive"}
-		print(data)
-		if event == "Reset":
-			event = "EVENT21_OFF"
 		sc.send(time_stamp=logdate, message_type=event, data=data)
 		msg = sc.receive()
 		print(msg)
@@ -178,11 +167,14 @@ def event_call(event,temp,path):
 			print("API success")
 		else:
 			print("API failed please check")
-			error.raised("3","API failed")
+			error.raised(32,"Error in Event API")
 	except Exception as e:
-		print(str(e))
 		print("error in event_call function")
-		error.raised("3",str(e))
+		error.raised(8,"Error in API")
+		with open(net_file,'a+') as nfile:
+			event_data = {'event':event,'data':data}
+			nfile.write(str(event_data))
+			nfile.write("\n")
 
 
 def timer(algo,flag,cam):
@@ -364,7 +356,7 @@ def timer(algo,flag,cam):
 
 	except Exception as e:
 		print (str(e),"error in timer")
-		error.raised("7",str(e))
+		error.raised(128,"Error in Timer function")
 
 def video_trigger(cam,event):
 	global video_flag
@@ -378,7 +370,7 @@ def video_trigger(cam,event):
 
 	except Exception as e:
 		print (str(e),"error in timer")
-		error.raised("7",str(e))
+		error.raised(128,"Error in Timer function")
 
 def reset():
 	global Ptimer,Mtimer,Dtimer
@@ -388,4 +380,15 @@ def reset():
 		event_call("Reset",None,None)
 	Ptimer,Dtimer,Mtimer=0,0,0
 
+
+def continue_event(off_time):
+	global Mtrigger,Dtrigger,Ptrigger
+	print("Initial time P -> {}  D -> {}  M -> {}".format(Ptrigger,Dtrigger,Mtrigger))
+	if Ptrigger != 0:
+		Ptrigger = Ptrigger + timedelta(seconds = off_time)
+	elif Dtrigger != 0:
+		Dtrigger = Dtrigger + timedelta(seconds = off_time)
+	elif Mtrigger != 0:
+		Mtrigger = Mtrigger + timedelta(seconds = off_time)
+	print("After Off_Time time P -> {}  D -> {}  M -> {}".format(Ptrigger, Dtrigger,Mtrigger))
 

@@ -21,7 +21,6 @@ This function shall perform the following:
 7)The Diagnostics methods finds the devices are in proper working condition or not.
 '''
 import cv2
-from queue import Queue
 import traceback
 import numpy as np
 from threading import Thread
@@ -57,13 +56,14 @@ count,prev_moving,moving,track_dict,st_dict,cyl = 0,False, False, {},0,0
 first_check = datetime.strptime(first_check,"%H:%M:%S")
 last_check = datetime.strptime(last_check,"%H:%M:%S")
 wt_flag =0
+idle_time = 0
 def Diagnostics():
 	try:
 		print("Inside Diagnostics function")
 		Health_Api.apicall()
 	except Exception as e:
 		print(str(e))
-		error("6",str(e))
+		error(16,"Error in  Health Api")
 
 class camera():
 
@@ -105,6 +105,7 @@ if __name__ == '__main__':
 		output_stride = model_cfg['output_stride']
 		darknet_image_T,network_T,class_names_T=tracker_model.load_model()
 		Timer.reset()
+		water_check.water_rectify()
 		print("Tracker model loaded")
 		cam1 = camera(cam1)
 		time.sleep(1)
@@ -113,12 +114,16 @@ if __name__ == '__main__':
 		ht_time=datetime.now()
 		#kk = 0
 		while True:
-			loop_start_time = datetime.now()
-			print("loop start",loop_start_time)
-			img1 = cam1.get_frame()
-			img1 = cv2.resize(img1,(1280,720))
-			img2 = cam2.get_frame()
-			img2 = cv2.resize(img2,(1280,720))
+			try:
+				loop_start_time = datetime.now()
+				print("loop start",loop_start_time)
+				img1 = cam1.get_frame()
+				img1 = cv2.resize(img1,(1280,720))
+				img2 = cam2.get_frame()
+				img2 = cv2.resize(img2,(1280,720))
+			except Exception as e:
+				print(str(e))
+				error.raised(1,"Error while reading from camera")
 			#cv2.imwrite("img1.jpg",img1)
 			#cv2.imwrite("img2.jpg",img2)
 			#break
@@ -127,6 +132,12 @@ if __name__ == '__main__':
 			moving,img2,track_dict,st_dict,count,cyl = XY_track.track(img2,darknet_image_T,network_T,class_names_T,track_dict,st_dict,count,cyl,moving)
 			#moving =True
 			if moving == True:
+				if idle_time != 0:
+					#print(idle_time,type(idle_time))
+					off_time = int((datetime.now() - idle_time).total_seconds())
+					print ("************************* OFF Time -> {} *******************".format(off_time))
+					Timer.continue_event(off_time)
+					idle_time = 0
 				input_image, draw_image, output_scale = posenet.read_imgfile(img1, scale_factor=1.0, output_stride=output_stride)
 				heatmaps_result, offsets_result, displacement_fwd_result, displacement_bwd_result = sess.run(model_outputs,feed_dict={'image:0': input_image})
 				pose_scores, keypoint_scores, keypoint_coords = posenet.decode_multiple_poses(
@@ -198,7 +209,11 @@ if __name__ == '__main__':
 				if cv2.waitKey(1) & 0xFF == ord('q'):
 					break"""
 			elif moving == False and prev_moving == True:
-				Timer.reset()
+					idle_time = datetime.now()
+			elif moving == False and prev_moving == False and idle_time != 0:
+				if datetime.now() > idle_time + timedelta(seconds = 60):
+					Timer.continue_event(60)
+					idle_time =datetime.now()
 			if ht_time < datetime.now():
 				health = Thread(target=Diagnostics,args=())
 				health.start()
@@ -232,4 +247,4 @@ if __name__ == '__main__':
 	except Exception as e:
 		print(str(e))
 		traceback.print_exc()
-		error.raised("1",str(e))
+		error.raised(1,"Error in Main function")

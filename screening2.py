@@ -33,7 +33,7 @@ def create():
 		client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 		#print("after socket create connection 8096")
 	except Exception as e:
-		error.raised("8",str(e))
+		error.raised(4,"Error in socket creation")
 		print("Not able to create client socket")
 		time.sleep(1)
 		create()
@@ -47,7 +47,7 @@ def connect():
 		encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 50]
 		print("After socket clikent connection connect 8096")
 	except Exception as e:
-		error.raised("8",str(e))
+		error.raised(2,"Error in screening2")
 		print("Not able to connect to pi, will try again")
 		time.sleep(1)
 		connect()
@@ -64,4 +64,4 @@ def screening(frame):
 		#print("s")
 	except Exception as e:
 		print(e.__str__())
-		error.raised("9",str(e))
+		error.raised(2,"Error in screening2")
