@@ -11,11 +11,12 @@ wat_quality =0
 water_path="/media/smartcow/SD/video_storage/"
 water_temp="/media/smartcow/SD/temp_video_storage/"
 def water_quality(img1):
+	global wat_flag
 	global wat_check
 	global wat_quality
 	global wat_rectify
-	im = img1[530:561,383:415]
-	im1 = cv2.rectangle(img1,(383,530),(415,561),(255,0,0),2)
+	im = img1[580:610,775:805]
+	#im1 = cv2.rectangle(img1,(383,530),(415,561),(255,0,0),2)
 	img_name=datetime.now().strftime("%H%M%S")+".jpg"
 	#cv2.imwrite(water_temp+img_name,im1)
 	sum_row = np.sum(im,axis = 0)
@@ -26,7 +27,7 @@ def water_quality(img1):
 	red = sum_col[2]
 	string = "R :"+ str(red)+" G : "+ str(green)+" B : "+str(blue)
 	#im1 = cv2.putText(im1, string, (20,100), cv2.FONT_HERSHEY_SIMPLEX , 1,  (255, 0, 255) , 2, cv2.LINE_AA)
-	cv2.imwrite(water_temp+img_name,im1)
+	cv2.imwrite(water_temp+img_name,img1)
 	print("Red -> {}   Green -> {}   Blue -> {} ".format(red,green,blue))
 	if wat_quality == 0 :
 		if int(red) > 70000 and int(green) > 70000 and int(blue) > 100000 :
@@ -37,7 +38,7 @@ def water_quality(img1):
 		if wat_check > 4:
 			img_dir=(datetime.now()).strftime("%Y_%m_%d")
 			wat_quality =1
-			wat_path = water_path+img_dir+"/SOLAPUR_EVENT1_ON_"+img_name
+			wat_path = water_path+img_dir+"/SOLAPUR_WATER_QUALITY_BAD_EVENT1_ON_"+img_name
 			shutil.move(water_temp+img_name,wat_path)
 			print("***************************** Water Quality not good ***************************")
 			try:
@@ -47,15 +48,16 @@ def water_quality(img1):
 				sc.send(time_stamp=logdate, message_type="EVENT1_ON", data=data)
 				msg = sc.receive()
 				print(msg)
+				wat_flag = 10
 				wat_check =0
 				if int(msg["data"]["status"]) == 200:
 					print("API success")
 				else:
 					print("API failed please check")
-					error.raised(516,"Error in water function")
+					error.raised(8,"Error in API")
 			except Exception as e:
 				print("error in event_call function")
-				error.raised(8,"Error in API")
+				error.raised(512,"Error in Water Check API")
 
 	if wat_quality ==1:
 		if int(red) < 45000 and int(green) < 45000 and int(blue) < 85000:
@@ -64,9 +66,10 @@ def water_quality(img1):
 		if wat_rectify >4 :
 			wat_quality =0
 			img_dir=(datetime.now()).strftime("%Y_%m_%d")
-			shutil.move(water_temp+img_name,water_path+img_dir+"/SOLAPUR_EVENT1_OFF_"+img_name)
+			shutil.move(water_temp+img_name,water_path+img_dir+"/SOLAPUR_WATER_QUALITY_RESTORED_EVENT1_OFF_"+img_name)
 			water_rectify()
 			wat_rectify=0
+			wat_flag = 10
 			print("***************************** Water Qualit Restored ***************************")
 
 def water_rectify():
@@ -82,8 +85,8 @@ def water_rectify():
 			print("API success")
 		else:
 			print("API failed please check")
-			error.raised(516,"Error in water function")
+			error.raised(8,"API failed")
 	except Exception as e:
 		print("error in event_call function")
-		error.raised(8,"Error in API")
+		error.raised(512,"Error in Water Check API")
 

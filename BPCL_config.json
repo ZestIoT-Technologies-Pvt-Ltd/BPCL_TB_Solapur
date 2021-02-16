@@ -13,8 +13,9 @@
 	"event_file":"/home/smartcow/BPCL/BPCL_final/last_event.txt",
 	"error_file":"/home/smartcow/BPCL/BPCL_final/error_file.txt",
 	"gpu_path":"/media/smartcow/SD/video_storage/",
-	"net_file":"/home/smartcow/BPCL/BPCL_final/net_event.txt",
+	"reset_time":240,
 	"temp_folder":"/media/smartcow/SD/temp_video_storage/",
+	"net_file":"/home/nvidia/BPCL/BPCL_final/net_event.txt",
 	"xy_tracker":{
 		"configPath":"/home/smartcow/BPCL/BPCL_final/tracker/yolov4-tiny_solapur.cfg",
 		"weightPath":"/home/smartcow/BPCL/BPCL_final/tracker/yolov4-tiny_solapur_best.weights",

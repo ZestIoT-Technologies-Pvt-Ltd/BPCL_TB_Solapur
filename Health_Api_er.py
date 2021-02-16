@@ -1,4 +1,6 @@
 import time
+import json
+import subprocess
 from sockets import ClientSocket
 from pynng import Timeout
 from datetime import datetime, timedelta
@@ -18,8 +20,6 @@ Requirements
 4) captures last rebbot time and device uptime.
 5) Sends all the information to Pi using sockets.
 """
-global er
-er=0
 error_file="/home/smartcow/BPCL/BPCL_final/error_code.txt"
 last_event="/home/smartcow/BPCL/BPCL_final/last_event.txt"
 def health():
@@ -36,13 +36,17 @@ def health():
         try:
                 with open(error_file,'r+') as f:
                         j= f.readlines()
+                        j=j[0].replace("'",'"')
                         #print(j[0])
-                        j = j[0].split(" :: ")
-                        error =j[-1]
-                        error_algo = j[0]
-                        error_time = j[1]
+                        er_str=json.loads(j)
+                        error = er_str["error_code"]
+                        error_algo = er_str["error_algo"]
+                        error_time = er_str["error_time"]
                         #print(" Last Error: {} has occured in {} part of the script at {}".format(error,error_algo,error_time))
         except Exception as e:
+                error ="nothing"
+                error_algo="NA"
+                error_time = str(datetime.now())
                 print(str(e))
         tegra=Popen(['/home/smartcow/tegrastats'],stdout=PIPE)
         time.sleep(7)
@@ -99,15 +103,10 @@ def health():
         return data
 
 def apicall():
-    global er
     try:
         sc = ClientSocket(device_id=str('BPCL_SUR_NX_0001'))
     except Exception as e:
-        er=er+1
-        if er < 4:
-            time.sleep(1)
-            apicall(event)
-        error.raised("7",str(e))
+        error.raised(4,"Error while creating socket")
 
     #while True:
     try:
@@ -120,8 +119,31 @@ def apicall():
         print(msg)
         if int(msg["data"]["status"]) == 200:
             print("API success")
+            net_event(sc)
         else:
-            error.raised("8","API failed")
+            error.raised(8,"API failed")
     except Exception as e:
-        error.raised("8",str(e))
+        print(str(e))
+        error.raised(16,"Error in Health API")
+#apicall()
+def net_event(sc):
+    try:
+        print("************************************* Checking previous events *****************************")
+        with open("/home/smartcow/BPCL/BPCL_final/net_event.txt","r+") as f:
+            for i in f.readlines():
+                i=i.replace("'",'"')
+                print(i)
+                net_line = json.loads(i)
+                #print("here")
+                data = net_line["data"]
+                event = net_line["event"]
+                logdate = net_line["data"]["event_time"]
+                #print(data,event,logdate)
+                sc.send(time_stamp=logdate, message_type=event, data=data)
+                msg = sc.receive()
+                print(msg)
+                subprocess.call(["sed -i 1d /home/smartcow/BPCL/BPCL_final/net_event.txt"],shell=True)
+    except Exception as e:
+        error.raised(32,"Error in Backup API")
+        print(str(e))
 apicall()

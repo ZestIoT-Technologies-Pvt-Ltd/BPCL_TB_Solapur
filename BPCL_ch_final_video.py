@@ -21,7 +21,6 @@ This function shall perform the following:
 7)The Diagnostics methods finds the devices are in proper working condition or not.
 '''
 import cv2
-from queue import Queue
 import traceback
 import numpy as np
 from threading import Thread
@@ -30,40 +29,40 @@ import json
 import time
 from datetime import datetime,timedelta
 import tensorflow as tf
-import Roi
+import Roi1 as Roi
 import Motion
 import View
 import posenet
 #import RTSP
 import tracker_model
-import XY_frame as XY_track
-import Timer_single_1 as Timer
+import XY_new as XY_track
+import Timer_network as Timer
 #import Angle
 import error
-import Health_Api
-import screening2
-import screening1
-import water_check_rec as water_check
-screening1.create()
-screening2.create()
-screening1.connect()
-screening2.connect()
+import Health_Api_er as Health_Api
+from stream import VideoStream
+sc1=VideoStream('edgeai.local',8097)
+sc2=VideoStream('edgeai.local',8096)
+sc1.connect()
+sc2.connect()
 config="/home/smartcow/BPCL/BPCL_final/BPCL_config.json"
 with open(config) as json_data:
 	info=json.load(json_data)
-	cam1,cam2,first_check,last_check= info["camera1"],info["camera2"],info["first_check"],info["last_check"]
+	cam1,cam2,first_check,last_check,reset_time= info["camera1"],info["camera2"],info["first_check"],info["last_check"],info["reset_time"]
 # initializing tracker variables
-count,prev_moving,moving,track_dict,st_dict,cyl = 0,False, False, {},0,0
+prev_moving,moving = False,False
 first_check = datetime.strptime(first_check,"%H:%M:%S")
 last_check = datetime.strptime(last_check,"%H:%M:%S")
 wt_flag =0
+cyl_reset=0
+idle_time = 0
 def Diagnostics():
 	try:
 		print("Inside Diagnostics function")
 		Health_Api.apicall()
 	except Exception as e:
 		print(str(e))
-		error("6",str(e))
+		error.raised(16,"Error in Health API")
 
 class camera():
 
@@ -99,36 +98,45 @@ if __name__ == '__main__':
 	global wat_check
 	global wat_rectify
 	try:
-		#cam = cv2.VideoCapture("/media/smartcow/SD/video_storage/2020_12_12/BHOPAL_BPCL_NX1_PERSON_NOT_ATTENTIVE_EVENT22_ON_2020-12-12T10-48-44.avi")
+		cam = cv2.VideoCapture("/media/smartcow/SD/v5/20210211155201.mp4")
+		font = cv2.FONT_HERSHEY_SIMPLEX
+		fourcc = cv2.VideoWriter_fourcc(*'XVID')
+		loc="/home/smartcow/vid_solapur_1.avi"
+		out=cv2.VideoWriter( loc, fourcc, 3, (1280,720), True)
 		sess=tf.compat.v1.Session()
 		model_cfg, model_outputs = posenet.load_model(101, sess)
 		output_stride = model_cfg['output_stride']
 		darknet_image_T,network_T,class_names_T=tracker_model.load_model()
 		Timer.reset()
-		water_check.water_rectify()
 		print("Tracker model loaded")
-		cam1 = camera(cam1)
-		time.sleep(1)
-		cam2 = camera(cam2)
-		time.sleep(1)
-		ht_time=datetime.now()
+		#cam1 = camera(cam1)
+		#time.sleep(1)
+		#cam2 = camera(cam2)
+		#time.sleep(1)
+		#ht_time=datetime.now()
 		#kk = 0
 		while True:
-			loop_start_time = datetime.now()
-			print("loop start",loop_start_time)
-			img1 = cam1.get_frame()
-			img1 = cv2.resize(img1,(1280,720))
-			img2 = cam2.get_frame()
-			img2 = cv2.resize(img2,(1280,720))
-			#cv2.imwrite("img1.jpg",img1)
-			#cv2.imwrite("img2.jpg",img2)
-			#break
-			#ret,img1 = cam.read()
-			#print("after camera read")
-			moving,img2,track_dict,st_dict,count,cyl = XY_track.track(img2,darknet_image_T,network_T,class_names_T,track_dict,st_dict,count,cyl,moving)
+			try:
+				loop_start_time = datetime.now()
+				#print("loop start",loop_start_time)
+				#img1 = cam1.get_frame()
+				#img1 = cv2.resize(img1,(1280,720))
+				#img2 = cam2.get_frame()
+				#img2 = cv2.resize(img2,(1280,720))
+				ret,img2 = cam.read()
+			except Exception as e:
+				error.raised(1,"Error in Reading from Camera")
+			img2,moving = XY_track.track(img2,darknet_image_T,network_T,class_names_T,moving)
 			#moving =True
-			if moving == True:
-				input_image, draw_image, output_scale = posenet.read_imgfile(img1, scale_factor=1.0, output_stride=output_stride)
+			"""if moving == True:
+				cyl_reset =0 
+				if idle_time != 0:
+					#print(idle_time,type(idle_time))
+					off_time = int((datetime.now() - idle_time).total_seconds())
+					print ("************************* OFF Time -> {} *******************".format(off_time))
+					Timer.continue_event(off_time)
+					idle_time = 0
+				input_image, draw_image, output_scale = posenet.read_imgfile(img1, scale_factor=0.7125, output_stride=output_stride)
 				heatmaps_result, offsets_result, displacement_fwd_result, displacement_bwd_result = sess.run(model_outputs,feed_dict={'image:0': input_image})
 				pose_scores, keypoint_scores, keypoint_coords = posenet.decode_multiple_poses(
 					heatmaps_result.squeeze(axis=0),
@@ -137,7 +145,7 @@ if __name__ == '__main__':
 					displacement_bwd_result.squeeze(axis=0),
 					output_stride=output_stride,
 					max_pose_detections=5,
-					min_pose_score=0.12)
+					min_pose_score=0.1)
 				keypoint_coords *= output_scale
                 
 				view_coords,view_scores,number_roi=Roi.roi_fun(keypoint_coords,keypoint_scores)
@@ -163,13 +171,13 @@ if __name__ == '__main__':
 				if number_roi >= 1 and number_view >=  1 and number_motion == 0:
 					Timer.timer("motion", False,cam1)
 					Motion_draw = False
-				img1 = cv2.putText(img1, "Person in ROI:"+str(Roi_draw) , (20,70), cv2.FONT_HERSHEY_SIMPLEX , 1,  (255, 0, 0) , 2, cv2.LINE_AA)
+				img1 = cv2.putText(img1, "Person in ROI: True" , (20,70), cv2.FONT_HERSHEY_SIMPLEX , 1,  (255, 0, 0) , 2, cv2.LINE_AA)
 				if number_view >= 1 and number_motion ==1:
 					img1 = cv2.putText(img1, "Person Attentiveness: True" , (20,120), cv2.FONT_HERSHEY_SIMPLEX , 1,  (255, 0, 0) , 2, cv2.LINE_AA)
 				else:
-					img1 = cv2.putText(img1, "Person Attentiveness: False" , (20,120), cv2.FONT_HERSHEY_SIMPLEX , 1,  (255, 0, 0) , 2, cv2.LINE_AA)
+					img1 = cv2.putText(img1, "Person Attentiveness: False" , (20,120), cv2.FONT_HERSHEY_SIMPLEX , 1,  (255, 0, 0) , 2, cv2.LINE_AA)'''
 
-				"""Roi_draw = " Person in ROI " + str(number_roi)
+				'''Roi_draw = " Person in ROI " + str(number_roi)
 				View_draw = " Person View " + str(number_view)
 				Motion_draw = " Person Motion " + str(number_motion)
 				current_time = datetime.now()
@@ -197,17 +205,25 @@ if __name__ == '__main__':
 				#check2.screening(img2) 
 				cv2.imshow("frame",overlay_image)
 				if cv2.waitKey(1) & 0xFF == ord('q'):
-					break"""
+					break'''
 			elif moving == False and prev_moving == True:
-				Timer.reset()
+				cyl_reset = datetime.now()+timedelta(seconds = reset_time)
+				idle_time = datetime.now()
+			elif moving == False and prev_moving ==False and idle_time != 0:
+				if datetime.now() > idle_time + timedelta(seconds = 60):
+					Timer.continue_event(60)
+					idle_time =datetime.now()
+			if cyl_reset !=0:
+				if datetime.now() > cyl_reset and moving == False:
+					Timer.reset()
 			if ht_time < datetime.now():
 				health = Thread(target=Diagnostics,args=())
 				health.start()
 				ht_time=datetime.now()+timedelta(minutes=5)
-			screening1.screening(img1)
-			screening2.screening(img2)
+			#sc1.screening(img1)
+			#sc2.screening(img2)"""
 			tf.keras.backend.clear_session()
-			loop_end_time = datetime.now()
+			"""loop_end_time = datetime.now()
 			if (loop_end_time.time() >= first_check.time() and loop_end_time.time() < last_check.time() and moving == True):
 				if wt_flag == 0:
 					water_check.water_quality(img1)
@@ -221,8 +237,7 @@ if __name__ == '__main__':
 					first_check=first_check+timedelta(minutes=60)
 					wt_flag = 0
 					wat_check = 0
-					wat_rectify = 0
-
+					wat_rectify = 0"""
 			loop_end_time = datetime.now()
 			while(int((loop_end_time - loop_start_time).total_seconds()*1000) < 300 ):
 				loop_end_time = datetime.now()
@@ -230,7 +245,10 @@ if __name__ == '__main__':
 			#print("end_time",loop_end_time)
 			print(str(datetime.now()))
 			prev_moving = moving
+			out.write(img2)
 	except Exception as e:
 		print(str(e))
 		traceback.print_exc()
-		error.raised("1",str(e))
+		error.raised(1,"Error in main Script")
+
+

@@ -1,1 +1,1 @@
-Main script :: 2020-09-04 23:43:43.551358 :: None ****
+{'error_code': 1, 'error_algo': 'Error in Reading Camera', 'error_time': '2021-02-13 14:22:08'}
